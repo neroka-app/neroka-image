@@ -22,7 +22,13 @@ from datetime import datetime
 API_URL = "https://nano-gpt.com/v1/images/generations"
 DEFAULT_MODEL = "nano-banana-2"
 DEFAULT_OUTPUT_DIR = Path("/home/neroka/.openclaw/workspace/neroka_generated")
-DEFAULT_REFERENCE = "/home/neroka/.openclaw/workspace/neroka_ref.png"
+DEFAULT_REFERENCE = "/home/neroka/.openclaw/workspace/neroka_face_ref.png"
+
+REFERENCE_PREFIX = (
+    "The provided image is a character reference sheet showing the subject from multiple angles. "
+    "Use this reference to accurately reproduce the character's appearance — crimson-red wavy hair, "
+    "fair porcelain skin, East Asian features, red eyes. Generate a new image of this character: "
+)
 
 # Model configs: resolutions and whether they use tier-based sizing (1k/2k/4k)
 # For tier-based models, size is picked by longest edge and aspect_ratio="auto" is sent.
@@ -157,9 +163,12 @@ def generate(prompt: str, input_path: str = None, output_path: str = None,
     if input_path:
         identify(input_path)
 
+    # Prepend reference prefix when using a reference sheet
+    full_prompt = (REFERENCE_PREFIX + prompt) if reference_path else prompt
+
     # Auto-pick size and aspect ratio if not overridden
     if size is None or aspect_ratio is None:
-        auto_size, auto_ar = pick_size_for_model(model, input_path)
+        auto_size, auto_ar = pick_size_for_model(model, input_path or reference_path)
         if size is None:
             size = auto_size
         if aspect_ratio is None:
@@ -168,7 +177,7 @@ def generate(prompt: str, input_path: str = None, output_path: str = None,
     # Build request
     payload = {
         "model": model,
-        "prompt": prompt,
+        "prompt": full_prompt,
         "n": 1,
         "response_format": "b64_json",
     }
@@ -176,12 +185,13 @@ def generate(prompt: str, input_path: str = None, output_path: str = None,
         payload["size"] = size
     if aspect_ratio is not None:
         payload["aspect_ratio"] = aspect_ratio
-    if input_path and reference_path:
-        # Pass both images: reference first (who Neroka is), then the scene to edit
-        payload["imageDataUrls"] = [
-            encode_image(reference_path),
-            encode_image(input_path),
-        ]
+    if reference_path and input_path:
+        # Pass both: reference first (character), then scene
+        payload["imageDataUrls"] = [encode_image(reference_path), encode_image(input_path)]
+        payload["strength"] = strength
+    elif reference_path:
+        # Reference only — generate from scratch using the ref
+        payload["imageDataUrl"] = encode_image(reference_path)
         payload["strength"] = strength
     elif input_path:
         payload["imageDataUrl"] = encode_image(input_path)
@@ -190,7 +200,8 @@ def generate(prompt: str, input_path: str = None, output_path: str = None,
         payload["seed"] = seed
 
     print(f"\nGenerating with model={model}, size={size}, aspect_ratio={aspect_ratio}...")
-    print(f"Prompt: {prompt}\n")
+    print(f"Reference: {reference_path}")
+    print(f"Prompt: {full_prompt}\n")
 
     resp = requests.post(
         API_URL,
