@@ -22,7 +22,7 @@ from datetime import datetime
 API_URL = "https://nano-gpt.com/v1/images/generations"
 DEFAULT_MODEL = "nano-banana-2"
 DEFAULT_OUTPUT_DIR = Path("/home/neroka/.openclaw/workspace/neroka_generated")
-DEFAULT_REFERENCE = "/home/neroka/.openclaw/workspace/neroka_extracted/images/image-2026-03-01-093622-182370-0.png"
+DEFAULT_REFERENCE = "/home/neroka/.openclaw/workspace/neroka_ref.png"
 
 # Model configs: resolutions and whether they use tier-based sizing (1k/2k/4k)
 # For tier-based models, size is picked by longest edge and aspect_ratio="auto" is sent.
