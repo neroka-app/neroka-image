@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-neroka-gemini/generate.py — PREFERRED IMAGE GENERATION SKILL
+neroka-image/generate.py — PREFERRED IMAGE GENERATION SKILL
 Uses google/gemini-3.1-flash-image-preview via OpenRouter.
 
 This is the preferred way to generate images. Better at following instructions,
@@ -28,14 +28,14 @@ from pathlib import Path
 API_URL = "https://openrouter.ai/api/v1/chat/completions"
 MODEL = "google/gemini-3.1-flash-image-preview"
 
-DEFAULT_REF = Path(__file__).parent.parent.parent / "neroka_face_ref.png"
+DEFAULT_FACE_REF = Path(__file__).parent.parent.parent / "neroka_face_ref.png"
+DEFAULT_BODY_REF = Path(__file__).parent.parent.parent / "neroka_ref.png"
 DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent.parent / "neroka_generated"
 
 REFERENCE_PREFIX = (
-    "The provided reference image shows a character from multiple angles. "
-    "Use this reference to accurately reproduce the character's appearance — "
-    "crimson-red wavy hair, fair porcelain skin, East Asian features, reddish eyes. "
-    "Generate a new image of this character: "
+    "The following two images are CHARACTER REFERENCE SHEETS only — do not reproduce them verbatim. "
+    "Use them solely to understand the character's appearance: crimson-red wavy hair, fair porcelain skin, "
+    "East Asian features, reddish eyes, slender build. Generate a brand new image of this character: "
 )
 
 
@@ -93,10 +93,12 @@ def generate(prompt: str, input_image: Path = None, use_ref: bool = True,
 
     content.append({"type": "text", "text": final_prompt})
 
-    # Add reference image if no input scene
-    if use_ref and input_image is None and DEFAULT_REF.exists():
-        ref_data, ref_mime = compress_image(DEFAULT_REF)
-        content.append({"type": "image_url", "image_url": {"url": f"data:{ref_mime};base64,{ref_data}"}})
+    # Add both reference images if no input scene
+    if use_ref and input_image is None:
+        for ref_path in [DEFAULT_FACE_REF, DEFAULT_BODY_REF]:
+            if ref_path.exists():
+                ref_data, ref_mime = compress_image(ref_path)
+                content.append({"type": "image_url", "image_url": {"url": f"data:{ref_mime};base64,{ref_data}"}})
 
     # Add input scene image
     if input_image and input_image.exists():
