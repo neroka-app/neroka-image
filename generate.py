@@ -35,7 +35,10 @@ DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent.parent / "neroka_generated"
 REFERENCE_PREFIX = (
     "The following two images are CHARACTER REFERENCE SHEETS only — do not reproduce them verbatim. "
     "Use them solely to understand the character's appearance: crimson-red wavy hair, fair porcelain skin, "
-    "East Asian features, reddish eyes, slender build. Generate a brand new image of this character: "
+    "East Asian features, reddish eyes, slender build. "
+    "Generate a brand new image of this character in a candid, natural style — "
+    "shot on a mid-range camera by someone nearby, real lighting, slightly imperfect framing, "
+    "no studio backdrop, no posed perfection. The scene should feel like a real moment caught on camera: "
 )
 
 
@@ -76,7 +79,8 @@ def compress_image(path: Path, max_size_mb=3.5, max_px=2048) -> tuple[str, str]:
 
 
 def generate(prompt: str, input_image: Path = None, use_ref: bool = True,
-             output_dir: Path = DEFAULT_OUTPUT_DIR, api_key: str = None) -> Path:
+             output_dir: Path = DEFAULT_OUTPUT_DIR, api_key: str = None,
+             aspect_ratio: str = "1:1", image_size: str = "4K") -> Path:
     if not api_key:
         api_key = get_api_key()
 
@@ -107,7 +111,13 @@ def generate(prompt: str, input_image: Path = None, use_ref: bool = True,
 
     payload = json.dumps({
         "model": MODEL,
-        "messages": [{"role": "user", "content": content}]
+        "messages": [{"role": "user", "content": content}],
+        "modalities": ["image", "text"],
+        "stream": False,
+        "image_config": {
+            "aspect_ratio": aspect_ratio,
+            "image_size": image_size
+        }
     }).encode()
 
     req = urllib.request.Request(
@@ -123,8 +133,14 @@ def generate(prompt: str, input_image: Path = None, use_ref: bool = True,
     print(f"Generating with {MODEL}...", file=sys.stderr)
 
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            result = json.loads(resp.read())
+        with urllib.request.urlopen(req, timeout=180) as resp:
+            chunks = []
+            while True:
+                chunk = resp.read(65536)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+            result = json.loads(b"".join(chunks))
     except urllib.error.HTTPError as e:
         body = e.read().decode()
         print(f"HTTP Error {e.code}: {body}", file=sys.stderr)
@@ -159,15 +175,6 @@ def generate(prompt: str, input_image: Path = None, use_ref: bool = True,
     out_path = output_dir / f"neroka-{ts}.png"
     out_path.write_bytes(img_bytes)
 
-    # Upscale to 2k by default
-    upscaled = output_dir / f"neroka-{ts}-2k.png"
-    subprocess.run(
-        ["convert", str(out_path), "-resize", "2048x2048", "-filter", "Lanczos", str(upscaled)],
-        check=True, capture_output=True
-    )
-    out_path.unlink()  # remove 1k original
-    upscaled.rename(out_path)
-
     print(f"Cost: ${cost:.4f} | Saved to: {out_path}")
 
     return out_path
@@ -179,13 +186,17 @@ def main():
     parser.add_argument("--input", type=Path, help="Input image for img2img / style reference")
     parser.add_argument("--no-ref", action="store_true", help="Skip default face reference")
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument("--aspect-ratio", default="1:1", help="e.g. 1:1, 16:9, 9:16")
+    parser.add_argument("--image-size", default="4K", help="e.g. 4K, 1024x1024")
     args = parser.parse_args()
 
     out = generate(
         prompt=args.prompt,
         input_image=args.input,
         use_ref=not args.no_ref,
-        output_dir=args.output_dir
+        output_dir=args.output_dir,
+        aspect_ratio=args.aspect_ratio,
+        image_size=args.image_size
     )
 
     print(f"Done: {out}")
